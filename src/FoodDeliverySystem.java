@@ -9,17 +9,24 @@ public class FoodDeliverySystem {
         System.out.println("Food Delivery System Initialized.");
     }
 
-    // Add a new user
+    //  Add a new user
     public void addUser(String name, double balance, boolean isPremium) {
         String sql = "INSERT INTO users (name, balance, isPremium) VALUES (?, ?, ?) RETURNING id";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
+
             stmt.setString(1, name);
             stmt.setDouble(2, balance);
             stmt.setBoolean(3, isPremium);
-            stmt.executeUpdate();
-            System.out.println("User added successfully!");
+
+            // RETURNING id
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    int userId = rs.getInt(1); 
+                    System.out.println("User added successfully! ID: " + userId);
+                }
+            }
         } catch (SQLException e) {
             System.err.println("Error adding user: " + e.getMessage());
         }
@@ -31,6 +38,7 @@ public class FoodDeliverySystem {
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
+
             stmt.setString(1, name);
             stmt.setString(2, location);
             stmt.executeUpdate();
@@ -40,12 +48,13 @@ public class FoodDeliverySystem {
         }
     }
 
-
+    //  Add a new menu item
     public void addMenuItem(int restaurantId, String name, double price) {
         String sql = "INSERT INTO menu_items (restaurant_id, name, price) VALUES (?, ?, ?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
+
             stmt.setInt(1, restaurantId);
             stmt.setString(2, name);
             stmt.setDouble(3, price);
@@ -56,7 +65,7 @@ public class FoodDeliverySystem {
         }
     }
 
-
+    //  Place an order
     public void placeOrder(int userId, int restaurantId, double totalPrice) {
         String checkUserBalanceSql = "SELECT balance FROM users WHERE id = ?";
         String updateUserBalanceSql = "UPDATE users SET balance = balance - ? WHERE id = ?";
@@ -65,7 +74,7 @@ public class FoodDeliverySystem {
         try (Connection conn = DatabaseConnection.getConnection()) {
             conn.setAutoCommit(false);
 
-
+            // Check user balance
             try (PreparedStatement checkStmt = conn.prepareStatement(checkUserBalanceSql)) {
                 checkStmt.setInt(1, userId);
                 ResultSet rs = checkStmt.executeQuery();
@@ -73,22 +82,24 @@ public class FoodDeliverySystem {
                     double balance = rs.getDouble("balance");
                     if (balance < totalPrice) {
                         System.out.println("Insufficient balance.");
+                        conn.rollback();
                         return;
                     }
                 } else {
                     System.out.println("User not found.");
+                    conn.rollback();
                     return;
                 }
             }
 
-
+            // Deduct balance
             try (PreparedStatement updateStmt = conn.prepareStatement(updateUserBalanceSql)) {
                 updateStmt.setDouble(1, totalPrice);
                 updateStmt.setInt(2, userId);
                 updateStmt.executeUpdate();
             }
 
-
+            // Insert order
             try (PreparedStatement insertStmt = conn.prepareStatement(insertOrderSql)) {
                 insertStmt.setInt(1, userId);
                 insertStmt.setInt(2, restaurantId);
@@ -103,11 +114,13 @@ public class FoodDeliverySystem {
         }
     }
 
+    // Show all restaurants 
     public void showRestaurants() {
-        String sql = "SELECT * FROM restaurants";
+        String sql = "SELECT id, name, location FROM restaurants"; 
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
+
             ResultSet rs = stmt.executeQuery();
             if (!rs.isBeforeFirst()) {
                 System.out.println("No restaurants found.");
@@ -115,19 +128,20 @@ public class FoodDeliverySystem {
             }
             while (rs.next()) {
                 System.out.println("ID: " + rs.getInt("id") + ", Name: " + rs.getString("name") +
-                        ", Location: " + rs.getString("location"));
+                        ", Location: " + rs.getString("location")); 
             }
         } catch (SQLException e) {
             System.err.println("Error fetching restaurants: " + e.getMessage());
         }
     }
 
-
+    // Show user transaction history
     public void showUserTransactions(int userId) {
         String sql = "SELECT * FROM orders WHERE user_id = ?";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
+
             stmt.setInt(1, userId);
             ResultSet rs = stmt.executeQuery();
             if (!rs.isBeforeFirst()) {
